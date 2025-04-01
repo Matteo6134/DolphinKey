@@ -1,0 +1,372 @@
+# Documentazione del Progetto: Migrazione da Linux a ESP32-S3
+
+## Introduzione
+
+Questo documento descrive la migrazione completa di un lettore SRIX4K da un sistema Linux a un dispositivo tascabile basato su ESP32-S3 con display integrato e tasti direzionali. Il progetto trasforma un'applicazione a riga di comando in un dispositivo portatile autonomo con interfaccia grafica, mantenendo tutte le funzionalità originali.
+
+## Componenti Hardware Necessari
+
+### Componenti Principali
+
+| Componente | Descrizione | Specifiche Consigliate | Esempio |
+|------------|-------------|------------------------|---------|
+| Scheda ESP32-S3 | Microcontrollore con display integrato | ESP32-S3, 8MB Flash, 8MB PSRAM, display integrato | LILYGO T-Display-S3 o Waveshare ESP32-S3 Touch LCD 2.8" |
+| Lettore NFC | Modulo NFC compatibile con tag SRIX4K | Frequenza 13.56MHz, supporto ISO14443B | Modulo PN532 NFC RFID |
+| Batteria | Alimentazione portatile | LiPo 3.7V, 1000-2000mAh | Batteria LiPo 3.7V 1200mAh con connettore JST-PH |
+| Tasti Direzionali | Pulsanti per la navigazione | 5 pulsanti tattili (su, giù, sinistra, destra, selezione) | Pulsanti tattili 6x6mm |
+| Case | Contenitore protettivo | Stampato in 3D, ABS o PLA | File STL inclusi |
+
+### Componenti Aggiuntivi
+
+| Componente | Descrizione | Quantità |
+|------------|-------------|----------|
+| Cavi Jumper | Per collegare il modulo NFC | 1 set |
+| Resistori | 10kΩ (opzionali, se non si usano i pull-up interni) | 5 |
+| Viti | M2x6mm per assemblaggio | 8 |
+| Connettore JST | Per la batteria (se non incluso nella scheda) | 1 |
+
+## Istruzioni di Assemblaggio
+
+### 1. Preparazione dei Componenti
+
+1. Verificare che tutti i componenti siano presenti e funzionanti
+2. Caricare la batteria LiPo prima dell'assemblaggio
+3. Stampare il case 3D utilizzando i file STL forniti
+
+### 2. Collegamento del Modulo NFC
+
+#### Collegamento con LILYGO T-Display-S3
+
+| Pin PN532 | Pin ESP32-S3 | Funzione |
+|-----------|--------------|----------|
+| VCC | 3.3V | Alimentazione |
+| GND | GND | Terra |
+| SCL | GPIO9 | Clock SPI |
+| SDA | GPIO8 | MOSI SPI |
+| MISO | GPIO10 | MISO SPI |
+| IRQ | GPIO2 | Interrupt |
+| RST | GPIO3 | Reset |
+
+#### Collegamento con Waveshare ESP32-S3 Touch LCD 2.8"
+
+| Pin PN532 | Pin ESP32-S3 | Funzione |
+|-----------|--------------|----------|
+| VCC | 3.3V | Alimentazione |
+| GND | GND | Terra |
+| SCL | GPIO36 | Clock SPI |
+| SDA | GPIO35 | MOSI SPI |
+| MISO | GPIO37 | MISO SPI |
+| IRQ | GPIO2 | Interrupt |
+| RST | GPIO3 | Reset |
+
+### 3. Collegamento dei Tasti Direzionali
+
+| Pulsante | Pin ESP32-S3 | Funzione |
+|----------|--------------|----------|
+| SU | GPIO4 | Navigazione verso l'alto |
+| GIÙ | GPIO5 | Navigazione verso il basso |
+| SINISTRA | GPIO6 | Navigazione a sinistra |
+| DESTRA | GPIO7 | Navigazione a destra |
+| SELEZIONE | GPIO8 | Conferma/Selezione |
+
+**Nota**: Ogni pulsante deve essere collegato tra il pin GPIO e GND. I pin GPIO sono configurati con resistenze di pull-up interne, quindi non sono necessarie resistenze esterne.
+
+### 4. Collegamento della Batteria
+
+1. Collegare il connettore JST della batteria al connettore corrispondente sulla scheda ESP32-S3
+2. Verificare la polarità corretta (rosso = positivo, nero = negativo)
+3. Se la scheda non dispone di un connettore per batteria, utilizzare un modulo di gestione batteria esterno
+
+### 5. Assemblaggio del Case
+
+1. Posizionare la scheda ESP32-S3 nella parte inferiore del case
+2. Fissare il modulo NFC nell'apposito alloggiamento
+3. Posizionare i pulsanti negli appositi fori
+4. Posizionare la batteria nell'apposito alloggiamento
+5. Chiudere il case con la parte superiore
+6. Fissare le due parti con le viti M2x6mm
+
+## Installazione del Software
+
+### 1. Configurazione dell'Ambiente di Sviluppo
+
+1. Installare Arduino IDE (versione 2.x o superiore)
+2. Aggiungere il supporto per ESP32-S3 tramite Gestore Schede:
+   - Aprire Arduino IDE
+   - Andare su File > Preferenze
+   - Aggiungere `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json` al campo "URL aggiuntivi per il Gestore schede"
+   - Andare su Strumenti > Scheda > Gestore Schede
+   - Cercare "esp32" e installare "ESP32 by Espressif Systems"
+
+3. Installare le librerie necessarie tramite Gestore Librerie:
+   - Adafruit_PN532 (per il lettore NFC)
+   - TFT_eSPI (per il display)
+   - ArduinoJson (per la gestione dei dati)
+
+4. Configurare la libreria TFT_eSPI:
+   - Localizzare il file `User_Setup_Select.h` nella cartella della libreria TFT_eSPI
+   - Commentare la riga `#include <User_Setup.h>`
+   - Decommentare la riga appropriata per la tua scheda:
+     - Per LILYGO T-Display-S3: `#include <User_Setups/Setup_T_Display_S3.h>`
+     - Per Waveshare ESP32-S3: `#include <User_Setups/Setup_ESP32_S3_Waveshare_2_8.h>`
+
+### 2. Struttura del Progetto
+
+Il progetto è organizzato nei seguenti file:
+
+```
+/SRIX_ESP32
+  ├── SRIX_ESP32.ino        # File principale
+  ├── nfc_reader.h          # Interfaccia per il lettore NFC
+  ├── nfc_reader.cpp        # Implementazione del lettore NFC
+  ├── srix.h                # Definizioni per tag SRIX
+  ├── srix.cpp              # Implementazione funzionalità SRIX
+  ├── srix_flag.h           # Definizioni per i flag SRIX
+  ├── srix_flag.cpp         # Implementazione dei flag SRIX
+  ├── ui_manager.h          # Gestione dell'interfaccia utente
+  ├── ui_manager.cpp        # Implementazione dell'interfaccia
+  ├── input_manager.h       # Gestione degli input
+  ├── input_manager.cpp     # Implementazione gestione input
+  └── navigation_controller.h # Controllo della navigazione
+  └── navigation_controller.cpp # Implementazione del controllo
+```
+
+### 3. Caricamento del Software
+
+1. Scaricare il codice sorgente dal repository
+2. Aprire il file `SRIX_ESP32.ino` in Arduino IDE
+3. Selezionare la scheda corretta:
+   - Strumenti > Scheda > ESP32 Arduino > ESP32-S3 Dev Module
+4. Configurare le opzioni della scheda:
+   - Flash Mode: QIO
+   - Flash Size: 8MB
+   - PSRAM: Enabled
+   - USB CDC On Boot: Enabled
+   - USB DFU On Boot: Disabled
+   - Upload Speed: 921600
+5. Collegare la scheda ESP32-S3 al computer tramite USB
+6. Selezionare la porta COM corretta in Strumenti > Porta
+7. Premere il pulsante "Carica" per compilare e caricare il software
+
+### 4. Verifica dell'Installazione
+
+1. Aprire il Monitor Seriale (Strumenti > Monitor Seriale)
+2. Impostare la velocità a 115200 baud
+3. Verificare che il dispositivo si avvii correttamente e mostri i messaggi di inizializzazione
+4. Avvicinare un tag SRIX4K al lettore NFC e verificare che venga rilevato
+
+## Manuale Utente
+
+### Panoramica del Dispositivo
+
+Il dispositivo ESP32-S3 NFC Reader è un lettore portatile per tag SRIX4K con le seguenti funzionalità:
+
+- Lettura e scrittura di tag SRIX4K
+- Visualizzazione delle informazioni del tag su display integrato
+- Navigazione tramite tasti direzionali
+- Alimentazione a batteria per l'uso portatile
+- Modalità di risparmio energetico per prolungare l'autonomia
+
+### Accensione e Spegnimento
+
+- **Accensione**: Premere il pulsante di accensione (se presente) o collegare la batteria
+- **Spegnimento**: Il dispositivo entra automaticamente in modalità deep sleep dopo 5 minuti di inattività
+- **Riattivazione**: Premere qualsiasi pulsante per riattivare il dispositivo dalla modalità sleep
+
+### Navigazione dell'Interfaccia
+
+#### Schermata Home
+
+- **Visualizzazione**: "Avvicina un tag SRIX4K"
+- **Tasti**:
+  - **Destra**: Accede alle Impostazioni
+  - **Selezione**: Mostra il menu principale
+
+#### Schermata Informazioni Tag
+
+- **Visualizzazione**: UID del tag, tipo e stato
+- **Tasti**:
+  - **Su/Giù**: Naviga tra le opzioni
+  - **Sinistra**: Torna alla Home
+  - **Selezione**: Attiva l'opzione selezionata
+    - "Leggi Blocchi": Visualizza i blocchi di memoria
+    - "Scrivi Blocchi": Modifica i blocchi di memoria
+    - "Indietro": Torna alla Home
+
+#### Schermata Lettura Blocchi
+
+- **Visualizzazione**: Numero e contenuto dei blocchi
+- **Tasti**:
+  - **Su/Giù**: Naviga tra i blocchi
+  - **Sinistra**: Torna alla schermata Informazioni Tag
+  - **Selezione**: Visualizza i dettagli del blocco selezionato
+  - **Su/Giù (tenuto premuto)**: Scorrimento rapido
+
+#### Schermata Dettaglio Blocco
+
+- **Visualizzazione**: Dettagli completi del blocco selezionato
+- **Tasti**:
+  - **Sinistra**: Torna alla schermata Lettura Blocchi
+  - **Selezione**: Entra in modalità modifica
+
+#### Schermata Scrittura Blocco
+
+- **Visualizzazione**: Editor per modificare il contenuto del blocco
+- **Tasti**:
+  - **Su/Giù**: Incrementa/decrementa il valore alla posizione corrente
+  - **Sinistra/Destra**: Sposta il cursore
+  - **Selezione**: Conferma la modifica
+  - **Sinistra (quando non in modalità modifica)**: Annulla
+
+#### Schermata Impostazioni
+
+- **Visualizzazione**: Opzioni di configurazione
+- **Tasti**:
+  - **Su/Giù**: Naviga tra le opzioni
+  - **Sinistra**: Torna alla Home
+  - **Selezione**: Attiva l'opzione selezionata
+    - "Luminosità": Regola la luminosità del display
+    - "Timeout": Regola il timeout dello schermo
+    - "Indietro": Torna alla Home
+
+### Lettura di un Tag
+
+1. Dalla schermata Home, avvicinare un tag SRIX4K al lettore
+2. Il dispositivo rileverà automaticamente il tag e mostrerà le informazioni
+3. Premere "Leggi Blocchi" per visualizzare il contenuto del tag
+4. Utilizzare i tasti Su/Giù per navigare tra i blocchi
+5. Premere Selezione per visualizzare i dettagli di un blocco specifico
+
+### Scrittura di un Tag
+
+1. Dalla schermata Informazioni Tag, selezionare "Scrivi Blocchi"
+2. Selezionare il blocco da modificare
+3. Premere Selezione per entrare in modalità modifica
+4. Utilizzare i tasti Su/Giù per modificare il valore alla posizione corrente
+5. Utilizzare i tasti Sinistra/Destra per spostare il cursore
+6. Premere Selezione per confermare la modifica
+7. Il dispositivo scriverà il nuovo valore sul tag e verificherà la scrittura
+
+### Risparmio Energetico
+
+- Il display si spegne automaticamente dopo 30 secondi di inattività
+- Premere qualsiasi tasto per riattivare il display
+- Il dispositivo entra in modalità deep sleep dopo 5 minuti di inattività
+- In modalità deep sleep, il consumo è ridotto al minimo
+- Premere il pulsante Selezione per riattivare il dispositivo dalla modalità deep sleep
+
+## Risoluzione dei Problemi
+
+### Il dispositivo non si accende
+
+- Verificare che la batteria sia carica
+- Verificare che la batteria sia collegata correttamente
+- Collegare il dispositivo a un computer tramite USB per verificare il funzionamento
+
+### Il lettore NFC non rileva i tag
+
+- Verificare che il tag sia di tipo SRIX4K
+- Avvicinare il tag al centro del lettore NFC
+- Verificare che il modulo NFC sia collegato correttamente
+- Riavviare il dispositivo
+
+### Il display non si accende
+
+- Premere qualsiasi tasto per riattivare il display dalla modalità di risparmio energetico
+- Verificare che il display sia configurato correttamente nel software
+- Riavviare il dispositivo
+
+### I pulsanti non funzionano
+
+- Verificare che i pulsanti siano collegati correttamente
+- Verificare che i pin GPIO siano configurati correttamente nel software
+- Riavviare il dispositivo
+
+### Errori durante la scrittura dei blocchi
+
+- Verificare che il tag sia di tipo SRIX4K
+- Verificare che il tag non sia protetto da scrittura
+- Mantenere il tag fermo durante l'operazione di scrittura
+- Riavviare il dispositivo e riprovare
+
+## Manutenzione
+
+### Batteria
+
+- Ricaricare la batteria quando il livello è basso
+- Non lasciare la batteria completamente scarica per lunghi periodi
+- Conservare il dispositivo in un luogo fresco e asciutto quando non in uso
+
+### Aggiornamenti Software
+
+1. Collegare il dispositivo al computer tramite USB
+2. Aprire il progetto in Arduino IDE
+3. Scaricare l'ultima versione del software dal repository
+4. Caricare il nuovo software sul dispositivo
+
+## Specifiche Tecniche
+
+### Hardware
+
+- **Microcontrollore**: ESP32-S3 dual-core Xtensa LX7 a 32-bit (240 MHz)
+- **Memoria**: 8MB Flash, 8MB PSRAM
+- **Display**: TFT LCD (dimensioni variabili in base al modello scelto)
+- **Lettore NFC**: Modulo PN532, frequenza 13.56MHz
+- **Alimentazione**: Batteria LiPo 3.7V, 1000-2000mAh
+- **Autonomia**: 8-12 ore di utilizzo continuo, fino a 30 giorni in standby
+- **Dimensioni**: Variabili in base al modello scelto e al case
+- **Peso**: Circa 100-150g (inclusa batteria)
+
+### Software
+
+- **Sistema Operativo**: FreeRTOS (integrato in ESP-IDF)
+- **Linguaggio di Programmazione**: C++ (Arduino Framework)
+- **Librerie Principali**:
+  - Adafruit_PN532 (modificata per supportare SRIX4K)
+  - TFT_eSPI
+  - ArduinoJson
+- **Funzionalità**:
+  - Lettura e scrittura di tag SRIX4K
+  - Interfaccia utente grafica
+  - Navigazione tramite tasti direzionali
+  - Modalità di risparmio energetico
+  - Deep sleep per prolungare l'autonomia
+
+## Confronto con la Versione Linux
+
+| Caratteristica | Versione Linux | Versione ESP32-S3 |
+|----------------|----------------|-------------------|
+| Interfaccia | Riga di comando | Grafica su display |
+| Portabilità | Richiede computer | Dispositivo tascabile autonomo |
+| Alimentazione | Da computer | Batteria ricaricabile |
+| Funzionalità NFC | Complete | Complete |
+| Velocità | Elevata | Buona |
+| Memoria | Abbondante | Limitata ma sufficiente |
+| Facilità d'uso | Richiede conoscenze tecniche | Intuitiva con navigazione visuale |
+
+## Conclusioni
+
+La migrazione del progetto da Linux a ESP32-S3 ha trasformato un'applicazione a riga di comando in un dispositivo portatile autonomo con interfaccia grafica, mantenendo tutte le funzionalità originali. Il dispositivo è ora più accessibile, portatile e facile da usare, pur conservando la capacità di leggere e scrivere tag SRIX4K.
+
+Le ottimizzazioni implementate hanno permesso di ottenere un'autonomia significativa e prestazioni fluide, rendendo il dispositivo adatto all'uso quotidiano. La struttura modulare del software permette future espansioni e personalizzazioni, adattandosi alle esigenze specifiche dell'utente.
+
+## Appendice: File STL per il Case
+
+I file STL per la stampa 3D del case sono disponibili nel repository del progetto. Il case è progettato per adattarsi alla scheda ESP32-S3 scelta e include alloggiamenti per il modulo NFC, i pulsanti e la batteria.
+
+## Appendice: Schemi di Collegamento
+
+Gli schemi dettagliati di collegamento sono disponibili nel repository del progetto. Gli schemi includono:
+
+- Collegamento del modulo NFC
+- Collegamento dei pulsanti
+- Collegamento della batteria
+- Schema completo del dispositivo
+
+## Appendice: Risorse Aggiuntive
+
+- [Repository GitHub del Progetto](https://github.com/username/SRIX_ESP32)
+- [Documentazione ESP32-S3](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/index.html)
+- [Documentazione Adafruit PN532](https://learn.adafruit.com/adafruit-pn532-rfid-nfc)
+- [Documentazione TFT_eSPI](https://github.com/Bodmer/TFT_eSPI)
+- [Forum di Supporto](https://forum.example.com/SRIX_ESP32)

@@ -1,0 +1,81 @@
+# Componenti Hardware Necessari per il Progetto
+
+## Scheda di Sviluppo ESP32-S3
+Dopo aver analizzato diverse opzioni, consiglio una delle seguenti schede di sviluppo ESP32-S3 con display integrato:
+
+1. **LILYGO T-Display-S3**
+   - Processore: ESP32-S3 dual-core Xtensa LX7 a 32-bit (240 MHz)
+   - Display: 1.9" LCD a colori
+   - Memoria: 8MB Flash, 8MB PSRAM
+   - Connettività: WiFi 2.4GHz e Bluetooth 5 (LE)
+   - Caratteristiche aggiuntive: 2 pulsanti programmabili, supporto batteria LiPo
+   - Vantaggi: Dimensioni compatte, ideale per dispositivo tascabile
+
+2. **Waveshare ESP32-S3 Touch LCD 2.8"**
+   - Processore: ESP32-S3 dual-core Xtensa LX7 a 32-bit (240 MHz)
+   - Display: 2.8" touchscreen capacitivo (240x320)
+   - Memoria: 8MB Flash, 8MB PSRAM
+   - Connettività: WiFi 2.4GHz e Bluetooth 5 (LE)
+   - Vantaggi: Display più grande con touch, buon compromesso tra dimensioni e leggibilità
+
+## Lettore NFC/RFID
+Per la compatibilità con i tag SRIX4K utilizzati nel progetto originale, consiglio:
+
+1. **Modulo PN532 NFC RFID**
+   - Frequenza: 13.56MHz
+   - Interfaccia: SPI/I2C/UART (configurabile)
+   - Compatibilità: ISO14443A/B, FeliCa, Mifare
+   - Vantaggi: Ampia compatibilità con diversi tipi di tag, inclusi quelli ISO14443B2SR (SRIX)
+   - Esempio: HiLetgo PN532 NFC RFID Module V3
+
+2. **Modulo MFRC522 RFID**
+   - Frequenza: 13.56MHz
+   - Interfaccia: SPI
+   - Compatibilità: Mifare 1K, 4K, Ultralight
+   - Nota: Potrebbe richiedere adattamenti per supportare i tag SRIX4K
+
+## Tasti Direzionali
+Per l'interfaccia utente con tasti direzionali, consiglio:
+
+1. **Joystick analogico**
+   - Tipo: Joystick analogico a 2 assi con pulsante centrale
+   - Interfaccia: Analogica (2 pin per assi X/Y) + digitale (pulsante)
+   - Vantaggi: Navigazione intuitiva in tutte le direzioni
+
+2. **Set di pulsanti direzionali**
+   - Configurazione: 4 pulsanti tattili (su, giù, sinistra, destra) + pulsante di conferma
+   - Interfaccia: Digitale (5 pin GPIO)
+   - Vantaggi: Implementazione semplice, feedback tattile chiaro
+
+## Alimentazione
+Per rendere il dispositivo portatile:
+
+1. **Batteria LiPo 3.7V**
+   - Capacità: 1000-2000mAh (a seconda delle dimensioni desiderate)
+   - Connettore: JST-PH 2.0mm
+   - Vantaggi: Ricaricabile, dimensioni compatte
+
+2. **Modulo di gestione batteria**
+   - Funzionalità: Ricarica, protezione da sovraccarico/scarica
+   - Nota: Molte schede ESP32-S3 hanno già questo modulo integrato
+
+## Componenti Aggiuntivi
+
+1. **Case protettivo**
+   - Materiale: Plastica ABS o simile
+   - Caratteristiche: Aperture per display, pulsanti e porta USB
+   - Opzione: Design personalizzato stampabile in 3D
+
+2. **Connettori e cavi**
+   - Cavi jumper per collegare il modulo NFC
+   - Connettori JST per la batteria (se non inclusi nella scheda)
+
+## Considerazioni sulla Compatibilità
+
+Il progetto originale utilizza la libreria libnfc per comunicare con i tag SRIX4K. Per l'ESP32-S3, sarà necessario:
+
+1. Adattare il codice per utilizzare le librerie disponibili per ESP32 (come MFRC522 o PN532)
+2. Implementare le funzionalità specifiche per i tag SRIX4K
+3. Ottimizzare il codice per le risorse limitate dell'ESP32-S3 rispetto a un sistema Linux
+
+La scheda ESP32-S3 con display integrato semplifica notevolmente il progetto, riducendo la necessità di componenti esterni e semplificando il cablaggio.

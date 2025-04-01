@@ -1,0 +1,784 @@
+# Implementazione della Gestione dei Tasti Direzionali
+
+## Introduzione
+
+La gestione dei tasti direzionali è un elemento fondamentale per l'interazione con il dispositivo ESP32-S3. Questo documento descrive l'implementazione dettagliata della gestione degli input e della logica di navigazione per il progetto SRIX4K Reader.
+
+## Architettura del Sistema di Input
+
+### Componenti Hardware
+
+Per l'implementazione dei tasti direzionali, sono state considerate due opzioni principali:
+
+1. **Set di Pulsanti Tattili Discreti**
+   - 4 pulsanti direzionali (su, giù, sinistra, destra)
+   - 1 pulsante di conferma/selezione
+   - Connessione: Ogni pulsante collegato a un pin GPIO dell'ESP32-S3
+
+2. **Joystick Analogico**
+   - 2 assi analogici (X e Y)
+   - 1 pulsante di conferma (pressione del joystick)
+   - Connessione: 2 pin ADC per gli assi, 1 pin GPIO per il pulsante
+
+Per questo progetto, la soluzione consigliata è il **set di pulsanti tattili discreti** per la sua semplicità di implementazione e affidabilità.
+
+### Connessioni Hardware
+
+```
+ESP32-S3 Pin | Funzione
+-------------|----------
+GPIO 4       | Pulsante SU
+GPIO 5       | Pulsante GIÙ
+GPIO 6       | Pulsante SINISTRA
+GPIO 7       | Pulsante DESTRA
+GPIO 8       | Pulsante SELEZIONE
+```
+
+Ogni pulsante deve essere collegato tra il pin GPIO e GND, con il pin GPIO configurato con resistenza di pull-up interna.
+
+## Implementazione Software Avanzata
+
+### Classe InputManager Migliorata
+
+```cpp
+// input_manager.h
+#ifndef INPUT_MANAGER_H
+#define INPUT_MANAGER_H
+
+#include <Arduino.h>
+#include <functional>
+
+enum Button {
+    BUTTON_UP,
+    BUTTON_DOWN,
+    BUTTON_LEFT,
+    BUTTON_RIGHT,
+    BUTTON_SELECT,
+    BUTTON_COUNT
+};
+
+enum ButtonEvent {
+    EVENT_PRESSED,
+    EVENT_RELEASED,
+    EVENT_HELD
+};
+
+typedef std::function<void(Button, ButtonEvent)> ButtonCallback;
+
+class InputManager {
+private:
+    uint8_t pins[BUTTON_COUNT];
+    bool currentState[BUTTON_COUNT];
+    bool lastState[BUTTON_COUNT];
+    unsigned long pressTime[BUTTON_COUNT];
+    unsigned long lastDebounceTime[BUTTON_COUNT];
+    
+    unsigned long debounceDelay;
+    unsigned long holdDelay;
+    
+    ButtonCallback callback;
+    
+    void processButton(Button button);
+
+public:
+    InputManager(uint8_t upPin, uint8_t downPin, uint8_t leftPin, uint8_t rightPin, uint8_t selectPin);
+    
+    void begin();
+    void setCallback(ButtonCallback cb);
+    
+    bool isPressed(Button button);
+    bool isHeld(Button button);
+    unsigned long getPressTime(Button button);
+    
+    void update();
+};
+
+#endif // INPUT_MANAGER_H
+```
+
+```cpp
+// input_manager.cpp
+#include "input_manager.h"
+
+InputManager::InputManager(uint8_t upPin, uint8_t downPin, uint8_t leftPin, uint8_t rightPin, uint8_t selectPin) {
+    pins[BUTTON_UP] = upPin;
+    pins[BUTTON_DOWN] = downPin;
+    pins[BUTTON_LEFT] = leftPin;
+    pins[BUTTON_RIGHT] = rightPin;
+    pins[BUTTON_SELECT] = selectPin;
+    
+    for (int i = 0; i < BUTTON_COUNT; i++) {
+        currentState[i] = false;
+        lastState[i] = false;
+        pressTime[i] = 0;
+        lastDebounceTime[i] = 0;
+    }
+    
+    debounceDelay = 50;    // 50ms debounce
+    holdDelay = 500;       // 500ms per considerare un pulsante "tenuto premuto"
+    
+    callback = nullptr;
+}
+
+void InputManager::begin() {
+    for (int i = 0; i < BUTTON_COUNT; i++) {
+        pinMode(pins[i], INPUT_PULLUP);
+    }
+}
+
+void InputManager::setCallback(ButtonCallback cb) {
+    callback = cb;
+}
+
+bool InputManager::isPressed(Button button) {
+    return currentState[button];
+}
+
+bool InputManager::isHeld(Button button) {
+    return currentState[button] && (millis() - pressTime[button] > holdDelay);
+}
+
+unsigned long InputManager::getPressTime(Button button) {
+    if (currentState[button]) {
+        return millis() - pressTime[button];
+    }
+    return 0;
+}
+
+void InputManager::processButton(Button button) {
+    bool reading = !digitalRead(pins[button]); // Attivo basso (pullup)
+    
+    if (reading != lastState[button]) {
+        lastDebounceTime[button] = millis();
+    }
+    
+    if ((millis() - lastDebounceTime[button]) > debounceDelay) {
+        // Se lo stato è cambiato dopo il debounce
+        if (reading != currentState[button]) {
+            currentState[button] = reading;
+            
+            // Se il pulsante è stato premuto
+            if (currentState[button]) {
+                pressTime[button] = millis();
+                if (callback) callback(button, EVENT_PRESSED);
+            } 
+            // Se il pulsante è stato rilasciato
+            else {
+                if (callback) callback(button, EVENT_RELEASED);
+            }
+        }
+        // Se il pulsante è tenuto premuto
+        else if (currentState[button] && (millis() - pressTime[button]) > holdDelay) {
+            if (callback) callback(button, EVENT_HELD);
+        }
+    }
+    
+    lastState[button] = reading;
+}
+
+void InputManager::update() {
+    for (int i = 0; i < BUTTON_COUNT; i++) {
+        processButton((Button)i);
+    }
+}
+```
+
+### Gestione Avanzata degli Eventi
+
+Per migliorare la gestione degli eventi di input, implementiamo un sistema basato su callback che permette di separare la logica di input dalla logica dell'applicazione.
+
+```cpp
+// navigation_controller.h
+#ifndef NAVIGATION_CONTROLLER_H
+#define NAVIGATION_CONTROLLER_H
+
+#include <Arduino.h>
+#include "input_manager.h"
+#include "ui_manager.h"
+#include "srix.h"
+
+class NavigationController {
+private:
+    UiManager* ui;
+    Srix* srix;
+    
+    // Stato di modifica
+    bool editMode;
+    uint32_t editValue;
+    uint8_t editPosition;
+    
+    void handleHomeScreen(Button button, ButtonEvent event);
+    void handleTagInfoScreen(Button button, ButtonEvent event);
+    void handleReadBlocksScreen(Button button, ButtonEvent event);
+    void handleBlockDetailScreen(Button button, ButtonEvent event);
+    void handleWriteBlockScreen(Button button, ButtonEvent event);
+    void handleSettingsScreen(Button button, ButtonEvent event);
+
+public:
+    NavigationController(UiManager* uiManager, Srix* srixInstance);
+    
+    void handleButtonEvent(Button button, ButtonEvent event);
+    void onTagDetected();
+    void onTagLost();
+};
+
+#endif // NAVIGATION_CONTROLLER_H
+```
+
+```cpp
+// navigation_controller.cpp
+#include "navigation_controller.h"
+
+NavigationController::NavigationController(UiManager* uiManager, Srix* srixInstance) {
+    ui = uiManager;
+    srix = srixInstance;
+    editMode = false;
+    editValue = 0;
+    editPosition = 0;
+}
+
+void NavigationController::handleButtonEvent(Button button, ButtonEvent event) {
+    // Gestione degli eventi in base alla schermata corrente
+    switch (ui->getCurrentScreen()) {
+        case SCREEN_HOME:
+            handleHomeScreen(button, event);
+            break;
+        case SCREEN_TAG_INFO:
+            handleTagInfoScreen(button, event);
+            break;
+        case SCREEN_READ_BLOCKS:
+            handleReadBlocksScreen(button, event);
+            break;
+        case SCREEN_BLOCK_DETAIL:
+            handleBlockDetailScreen(button, event);
+            break;
+        case SCREEN_WRITE_BLOCK:
+            handleWriteBlockScreen(button, event);
+            break;
+        case SCREEN_SETTINGS:
+            handleSettingsScreen(button, event);
+            break;
+    }
+}
+
+void NavigationController::onTagDetected() {
+    // Quando un tag viene rilevato
+    if (ui->getCurrentScreen() == SCREEN_HOME) {
+        MikaiError error = srix->init();
+        if (!MIKAI_IS_ERROR(error)) {
+            ui->showScreen(SCREEN_TAG_INFO);
+            ui->updateScreen(srix);
+        }
+    }
+}
+
+void NavigationController::onTagLost() {
+    // Quando un tag viene rimosso
+    if (ui->getCurrentScreen() != SCREEN_HOME && 
+        ui->getCurrentScreen() != SCREEN_SETTINGS) {
+        ui->showScreen(SCREEN_HOME);
+        ui->updateScreen(nullptr);
+    }
+}
+
+void NavigationController::handleHomeScreen(Button button, ButtonEvent event) {
+    if (event != EVENT_PRESSED) return;
+    
+    switch (button) {
+        case BUTTON_RIGHT:
+            ui->showScreen(SCREEN_SETTINGS);
+            break;
+        case BUTTON_SELECT:
+            // Mostra menu principale
+            ui->selectItem(MENU_FIRST);
+            ui->updateScreen();
+            break;
+        default:
+            break;
+    }
+}
+
+void NavigationController::handleTagInfoScreen(Button button, ButtonEvent event) {
+    if (event != EVENT_PRESSED) return;
+    
+    switch (button) {
+        case BUTTON_UP:
+            ui->selectPreviousItem();
+            break;
+        case BUTTON_DOWN:
+            ui->selectNextItem();
+            break;
+        case BUTTON_LEFT:
+            ui->showScreen(SCREEN_HOME);
+            break;
+        case BUTTON_SELECT:
+            switch (ui->getSelectedItem()) {
+                case MENU_FIRST: // Leggi Blocchi
+                    ui->showScreen(SCREEN_READ_BLOCKS);
+                    ui->updateScreen(srix);
+                    break;
+                case MENU_SECOND: // Scrivi Blocchi
+                    ui->showScreen(SCREEN_WRITE_BLOCK);
+                    ui->updateScreen(srix);
+                    break;
+                case MENU_THIRD: // Indietro
+                    ui->showScreen(SCREEN_HOME);
+                    break;
+                default:
+                    break;
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+void NavigationController::handleReadBlocksScreen(Button button, ButtonEvent event) {
+    if (event == EVENT_PRESSED) {
+        switch (button) {
+            case BUTTON_UP:
+                ui->previousBlock();
+                ui->updateScreen(srix);
+                break;
+            case BUTTON_DOWN:
+                ui->nextBlock();
+                ui->updateScreen(srix);
+                break;
+            case BUTTON_LEFT:
+                ui->showScreen(SCREEN_TAG_INFO);
+                ui->updateScreen(srix);
+                break;
+            case BUTTON_SELECT:
+                ui->showScreen(SCREEN_BLOCK_DETAIL);
+                ui->updateScreen(srix);
+                break;
+            default:
+                break;
+        }
+    } else if (event == EVENT_HELD) {
+        // Scorrimento rapido quando il pulsante è tenuto premuto
+        switch (button) {
+            case BUTTON_UP:
+                for (int i = 0; i < 5; i++) {
+                    ui->previousBlock();
+                    delay(50);
+                }
+                ui->updateScreen(srix);
+                break;
+            case BUTTON_DOWN:
+                for (int i = 0; i < 5; i++) {
+                    ui->nextBlock();
+                    delay(50);
+                }
+                ui->updateScreen(srix);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void NavigationController::handleBlockDetailScreen(Button button, ButtonEvent event) {
+    if (event != EVENT_PRESSED) return;
+    
+    switch (button) {
+        case BUTTON_LEFT:
+            ui->showScreen(SCREEN_READ_BLOCKS);
+            ui->updateScreen(srix);
+            break;
+        case BUTTON_SELECT:
+            // Entra in modalità modifica
+            editMode = true;
+            editValue = *srix->getBlock(ui->getCurrentBlock());
+            editPosition = 0;
+            ui->showScreen(SCREEN_WRITE_BLOCK);
+            ui->updateScreen(srix);
+            break;
+        default:
+            break;
+    }
+}
+
+void NavigationController::handleWriteBlockScreen(Button button, ButtonEvent event) {
+    if (event != EVENT_PRESSED) return;
+    
+    if (editMode) {
+        switch (button) {
+            case BUTTON_UP:
+                // Incrementa il valore alla posizione corrente
+                {
+                    uint32_t mask = 0xF << (28 - editPosition * 4);
+                    uint32_t val = (editValue & mask) >> (28 - editPosition * 4);
+                    val = (val + 1) & 0xF;
+                    editValue = (editValue & ~mask) | (val << (28 - editPosition * 4));
+                    ui->updateScreen(srix);
+                }
+                break;
+            case BUTTON_DOWN:
+                // Decrementa il valore alla posizione corrente
+                {
+                    uint32_t mask = 0xF << (28 - editPosition * 4);
+                    uint32_t val = (editValue & mask) >> (28 - editPosition * 4);
+                    val = (val - 1) & 0xF;
+                    editValue = (editValue & ~mask) | (val << (28 - editPosition * 4));
+                    ui->updateScreen(srix);
+                }
+                break;
+            case BUTTON_LEFT:
+                // Sposta a sinistra (posizione precedente)
+                if (editPosition > 0) {
+                    editPosition--;
+                    ui->updateScreen(srix);
+                }
+                break;
+            case BUTTON_RIGHT:
+                // Sposta a destra (posizione successiva)
+                if (editPosition < 7) {
+                    editPosition++;
+                    ui->updateScreen(srix);
+                }
+                break;
+            case BUTTON_SELECT:
+                // Conferma la modifica
+                srix->modifyBlock(editValue, ui->getCurrentBlock());
+                MikaiError error = srix->writeBlocks();
+                editMode = false;
+                
+                if (!MIKAI_IS_ERROR(error)) {
+                    ui->showScreen(SCREEN_READ_BLOCKS);
+                    ui->updateScreen(srix);
+                } else {
+                    // Gestione errore
+                    ui->showErrorMessage(error.message);
+                    ui->showScreen(SCREEN_READ_BLOCKS);
+                    ui->updateScreen(srix);
+                }
+                break;
+            default:
+                break;
+        }
+    } else {
+        switch (button) {
+            case BUTTON_LEFT:
+                // Annulla
+                ui->showScreen(SCREEN_READ_BLOCKS);
+                ui->updateScreen(srix);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void NavigationController::handleSettingsScreen(Button button, ButtonEvent event) {
+    if (event != EVENT_PRESSED) return;
+    
+    switch (button) {
+        case BUTTON_UP:
+            ui->selectPreviousItem();
+            break;
+        case BUTTON_DOWN:
+            ui->selectNextItem();
+            break;
+        case BUTTON_LEFT:
+            ui->showScreen(SCREEN_HOME);
+            break;
+        case BUTTON_SELECT:
+            // Gestione delle impostazioni
+            switch (ui->getSelectedItem()) {
+                case MENU_FIRST: // Luminosità
+                    // Implementazione della regolazione della luminosità
+                    break;
+                case MENU_SECOND: // Timeout
+                    // Implementazione della regolazione del timeout
+                    break;
+                case MENU_THIRD: // Indietro
+                    ui->showScreen(SCREEN_HOME);
+                    break;
+                default:
+                    break;
+            }
+            break;
+        default:
+            break;
+    }
+}
+```
+
+## Integrazione nel File Principale
+
+```cpp
+// SRIX_ESP32.ino
+#include <Arduino.h>
+#include <TFT_eSPI.h>
+#include "nfc_reader.h"
+#include "srix.h"
+#include "ui_manager.h"
+#include "input_manager.h"
+#include "navigation_controller.h"
+
+// Pin definitions
+#define PN532_IRQ   2
+#define PN532_RESET 3
+#define BUTTON_UP    4
+#define BUTTON_DOWN  5
+#define BUTTON_LEFT  6
+#define BUTTON_RIGHT 7
+#define BUTTON_SELECT 8
+
+// Global objects
+TFT_eSPI tft;
+NfcReader nfcReader(PN532_IRQ, PN532_RESET);
+Srix srix(&nfcReader);
+UiManager ui(&tft);
+InputManager input(BUTTON_UP, BUTTON_DOWN, BUTTON_LEFT, BUTTON_RIGHT, BUTTON_SELECT);
+NavigationController navigation(&ui, &srix);
+
+// Timing variables
+unsigned long lastTagCheck = 0;
+unsigned long tagCheckInterval = 500; // Check for tag every 500ms
+bool lastTagState = false;
+
+// Callback per gli eventi dei pulsanti
+void handleButtonEvent(Button button, ButtonEvent event) {
+    navigation.handleButtonEvent(button, event);
+}
+
+void setup() {
+    Serial.begin(115200);
+    Serial.println("SRIX ESP32-S3 Reader");
+    
+    // Initialize display
+    ui.begin();
+    
+    // Initialize NFC reader
+    if (!nfcReader.begin()) {
+        Serial.println("Failed to initialize NFC reader");
+        ui.showScreen(SCREEN_HOME);
+        ui.setTagPresent(false);
+    } else {
+        Serial.println("NFC reader initialized");
+        ui.showScreen(SCREEN_HOME);
+    }
+    
+    // Initialize input and set callback
+    input.begin();
+    input.setCallback(handleButtonEvent);
+}
+
+void loop() {
+    // Update input state
+    input.update();
+    
+    // Check for tag presence periodically
+    if (millis() - lastTagCheck > tagCheckInterval) {
+        lastTagCheck = millis();
+        
+        bool tagPresent = nfcReader.isTagPresent();
+        ui.setTagPresent(tagPresent);
+        
+        // Rileva cambiamenti nello stato del tag
+        if (tagPresent && !lastTagState) {
+            navigation.onTagDetected();
+        } else if (!tagPresent && lastTagState) {
+            navigation.onTagLost();
+        }
+        
+        lastTagState = tagPresent;
+    }
+    
+    // Gestione del risparmio energetico
+    // Implementare qui la logica per il risparmio energetico
+}
+```
+
+## Miglioramenti all'Interfaccia Utente per il Feedback Visivo
+
+Per migliorare l'esperienza utente, è importante fornire un feedback visivo chiaro quando i pulsanti vengono premuti. Aggiungiamo questa funzionalità alla classe UiManager:
+
+```cpp
+// Aggiungi questi metodi alla classe UiManager
+
+void UiManager::showErrorMessage(const char* message) {
+    // Salva lo stato corrente
+    Screen previousScreen = currentScreen;
+    
+    // Mostra il messaggio di errore
+    tft->fillRect(20, 60, tft->width() - 40, 60, TFT_RED);
+    tft->setTextColor(TFT_WHITE, TFT_RED);
+    tft->setTextSize(1);
+    tft->setCursor(30, 80);
+    tft->print(message);
+    tft->setCursor(30, 100);
+    tft->print("Premi un tasto per continuare");
+    
+    // Attendi la pressione di un tasto
+    delay(2000);
+    
+    // Ripristina lo stato precedente
+    updateScreen();
+}
+
+void UiManager::highlightButton(Button button) {
+    // Evidenzia visivamente il pulsante premuto
+    int x, y, w, h;
+    
+    switch (button) {
+        case BUTTON_UP:
+            x = tft->width() / 2 - 10;
+            y = tft->height() - 40;
+            w = 20;
+            h = 10;
+            break;
+        case BUTTON_DOWN:
+            x = tft->width() / 2 - 10;
+            y = tft->height() - 20;
+            w = 20;
+            h = 10;
+            break;
+        case BUTTON_LEFT:
+            x = 10;
+            y = tft->height() - 30;
+            w = 10;
+            h = 20;
+            break;
+        case BUTTON_RIGHT:
+            x = tft->width() - 20;
+            y = tft->height() - 30;
+            w = 10;
+            h = 20;
+            break;
+        case BUTTON_SELECT:
+            x = tft->width() / 2 - 15;
+            y = tft->height() - 35;
+            w = 30;
+            h = 30;
+            break;
+        default:
+            return;
+    }
+    
+    // Salva il colore originale
+    uint16_t originalColor = tft->readPixel(x, y);
+    
+    // Evidenzia
+    tft->fillRect(x, y, w, h, TFT_YELLOW);
+    
+    // Attendi brevemente
+    delay(50);
+    
+    // Ripristina
+    tft->fillRect(x, y, w, h, originalColor);
+}
+```
+
+## Modalità di Risparmio Energetico
+
+Per ottimizzare il consumo energetico del dispositivo, implementiamo una modalità di risparmio energetico:
+
+```cpp
+// Aggiungi queste variabili al file principale
+unsigned long lastActivityTime = 0;
+unsigned long screenTimeout = 30000; // 30 secondi di timeout
+bool screenOff = false;
+
+// Aggiungi questa funzione al file principale
+void checkPowerSaving() {
+    // Se c'è attività, resetta il timer
+    if (input.anyButtonPressed()) {
+        lastActivityTime = millis();
+        
+        // Se lo schermo era spento, riaccendilo
+        if (screenOff) {
+            tft.setBrightness(100); // Imposta la luminosità al 100%
+            screenOff = false;
+            ui.updateScreen(srix);
+        }
+    }
+    
+    // Se è passato il timeout senza attività, spegni lo schermo
+    if (!screenOff && millis() - lastActivityTime > screenTimeout) {
+        tft.setBrightness(0); // Spegni la retroilluminazione
+        screenOff = true;
+    }
+}
+
+// Modifica il loop principale per includere il controllo del risparmio energetico
+void loop() {
+    // Update input state
+    input.update();
+    
+    // Check for tag presence periodically
+    if (millis() - lastTagCheck > tagCheckInterval) {
+        // ... (codice esistente)
+    }
+    
+    // Gestione del risparmio energetico
+    checkPowerSaving();
+}
+```
+
+## Mappatura Completa delle Azioni dei Tasti
+
+Per fornire una documentazione completa, ecco una mappatura dettagliata delle azioni associate a ciascun tasto in ogni schermata:
+
+### Schermata Home
+- **Su**: Nessuna azione
+- **Giù**: Nessuna azione
+- **Sinistra**: Nessuna azione
+- **Destra**: Vai alle Impostazioni
+- **Selezione**: Mostra menu principale
+
+### Schermata Informazioni Tag
+- **Su**: Seleziona opzione precedente
+- **Giù**: Seleziona opzione successiva
+- **Sinistra**: Torna alla Home
+- **Destra**: Nessuna azione
+- **Selezione**: Attiva l'opzione selezionata
+  - "Leggi Blocchi": Vai alla schermata Lettura Blocchi
+  - "Scrivi Blocchi": Vai alla schermata Scrittura Blocchi
+  - "Indietro": Torna alla Home
+
+### Schermata Lettura Blocchi
+- **Su**: Blocco precedente
+- **Giù**: Blocco successivo
+- **Sinistra**: Torna alla schermata Informazioni Tag
+- **Destra**: Nessuna azione
+- **Selezione**: Vai alla schermata Dettaglio Blocco
+- **Su (tenuto premuto)**: Scorrimento rapido verso l'alto
+- **Giù (tenuto premuto)**: Scorrimento rapido verso il basso
+
+### Schermata Dettaglio Blocco
+- **Su**: Nessuna azione
+- **Giù**: Nessuna azione
+- **Sinistra**: Torna alla schermata Lettura Blocchi
+- **Destra**: Nessuna azione
+- **Selezione**: Entra in modalità modifica (vai alla schermata Scrittura Blocco)
+
+### Schermata Scrittura Blocco
+- **Su**: Incrementa il valore alla posizione corrente
+- **Giù**: Decrementa il valore alla posizione corrente
+- **Sinistra**: Sposta a sinistra / Annulla
+- **Destra**: Sposta a destra
+- **Selezione**: Conferma la modifica
+
+### Schermata Impostazioni
+- **Su**: Seleziona opzione precedente
+- **Giù**: Seleziona opzione successiva
+- **Sinistra**: Torna alla Home
+- **Destra**: Nessuna azione
+- **Selezione**: Attiva l'opzione selezionata
+  - "Luminosità": Regola la luminosità
+  - "Timeout": Regola il timeout dello schermo
+  - "Indietro": Torna alla Home
+
+## Considerazioni Finali
+
+L'implementazione della gestione dei tasti direzionali è stata progettata per essere:
+
+1. **Intuitiva**: Le azioni dei tasti sono coerenti tra le diverse schermate
+2. **Reattiva**: Il sistema risponde immediatamente agli input dell'utente
+3. **Flessibile**: Il sistema di callback permette di modificare facilmente il comportamento
+4. **Efficiente**: L'implementazione è ottimizzata per il consumo energetico
+
+Questa implementazione completa la migrazione del progetto da Linux a ESP32-S3, fornendo un'interfaccia utente intuitiva e funzionale per il dispositivo tascabile.

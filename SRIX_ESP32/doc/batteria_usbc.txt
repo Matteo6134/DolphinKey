@@ -1,0 +1,501 @@
+# Integrazione di Batteria Interna e Porta USB-C
+
+## Introduzione
+
+Questo documento descrive l'integrazione di una batteria interna e una porta USB-C per la ricarica nel progetto ESP32-S3 NFC Reader. Queste aggiunte migliorano significativamente la portabilità e l'usabilità del dispositivo, eliminando la necessità di batterie esterne e semplificando il processo di ricarica.
+
+## Componenti Hardware Aggiuntivi
+
+### Batteria Interna
+
+| Componente | Descrizione | Specifiche Consigliate | Esempio |
+|------------|-------------|------------------------|---------|
+| Batteria LiPo | Batteria ricaricabile al litio | 3.7V, 2000-3000mAh, dimensioni compatte | Adafruit Lithium Ion Polymer Battery 3.7V 2500mAh |
+| Connettore JST-PH | Connettore per la batteria | 2-pin, passo 2.0mm | JST-PH 2.0mm Connector |
+
+### Circuito di Gestione della Batteria
+
+| Componente | Descrizione | Specifiche Consigliate | Esempio |
+|------------|-------------|------------------------|---------|
+| Modulo di Gestione Batteria | Circuito per la ricarica e protezione | Supporto per batterie LiPo 3.7V, protezione da sovraccarico/scarica | TP4056 con protezione |
+| Convertitore Boost | Per mantenere tensione stabile | 3.7V a 5V, corrente di uscita >1A | MT3608 DC-DC Step Up Converter |
+
+### Porta USB-C
+
+| Componente | Descrizione | Specifiche Consigliate | Esempio |
+|------------|-------------|------------------------|---------|
+| Connettore USB-C | Porta per ricarica e programmazione | Femmina, montaggio PCB | USB Type-C Receptacle Connector |
+| Controller USB-C PD | Gestione Power Delivery (opzionale) | Supporto per USB PD 2.0/3.0 | STUSB4500 USB-C PD Controller |
+
+### Componenti Aggiuntivi
+
+| Componente | Descrizione | Quantità |
+|------------|-------------|----------|
+| Resistori | 5.1kΩ per configurazione USB-C | 2 |
+| Condensatori | 10μF, 0.1μF per filtraggio | 2-4 |
+| Diodi Schottky | Protezione da inversione di polarità | 1-2 |
+| Cavi | AWG26 per collegamenti interni | 1 set |
+
+## Schema di Collegamento
+
+### Circuito di Ricarica USB-C
+
+```
+USB-C
+  |
+  +-- CC1 --- 5.1kΩ --- GND  (Configurazione come dispositivo 5V)
+  |
+  +-- CC2 --- 5.1kΩ --- GND  (Configurazione come dispositivo 5V)
+  |
+  +-- VBUS -----------+
+  |                   |
+  +-- GND ------------+------ GND
+                      |
+                      v
+                   TP4056
+                      |
+                      +------ Batteria LiPo (+)
+                      |
+                      +------ Batteria LiPo (-)
+```
+
+### Circuito di Alimentazione
+
+```
+Batteria LiPo (3.7V)
+      |
+      +------+
+      |      |
+      v      |
+Convertitore  |
+   Boost      |
+ (3.7V→5V)    |
+      |       |
+      v       v
+     5V      3.3V
+      |       |
+      v       v
+ESP32-S3    Moduli
+(VIN)     (VCC 3.3V)
+```
+
+## Modifiche al Design Hardware
+
+### 1. Integrazione della Batteria
+
+La batteria LiPo sarà integrata direttamente nel case del dispositivo. Per garantire sicurezza e durata:
+
+1. Posizionare la batteria in un compartimento dedicato, lontano da componenti che generano calore
+2. Aggiungere imbottitura protettiva per evitare danni fisici alla batteria
+3. Prevedere un'apertura per la sostituzione della batteria in caso di necessità
+4. Includere fori di ventilazione per dissipare il calore
+
+### 2. Integrazione della Porta USB-C
+
+La porta USB-C sarà posizionata sul lato inferiore del dispositivo per facilitare la ricarica:
+
+1. Montare il connettore USB-C su una piccola PCB dedicata o direttamente sulla scheda principale
+2. Collegare la porta USB-C al circuito di ricarica TP4056
+3. Aggiungere un interruttore per selezionare tra modalità di ricarica e modalità di programmazione (opzionale)
+4. Prevedere un'apertura nel case per l'accesso alla porta USB-C
+
+### 3. Circuito di Gestione dell'Alimentazione
+
+Il circuito di gestione dell'alimentazione garantirà un funzionamento stabile e sicuro:
+
+1. Utilizzare il modulo TP4056 per la ricarica controllata della batteria
+2. Aggiungere protezione da sovraccarico, sovrascarica e cortocircuito
+3. Implementare un convertitore boost per fornire 5V stabili ai componenti che lo richiedono
+4. Aggiungere LED di stato per indicare:
+   - Ricarica in corso (rosso)
+   - Ricarica completata (verde)
+   - Batteria scarica (lampeggiante)
+
+## Modifiche al Case 3D
+
+### 1. Compartimento per la Batteria
+
+```
++---------------------------+
+|                           |
+|    +-------------------+  |
+|    |                   |  |
+|    |     Batteria      |  |
+|    |                   |  |
+|    +-------------------+  |
+|                           |
++---------------------------+
+```
+
+1. Dimensioni interne: ~60mm x 40mm x 10mm (adattare in base alla batteria scelta)
+2. Aggiungere clip di fissaggio per mantenere la batteria in posizione
+3. Prevedere un coperchio rimovibile per l'accesso alla batteria
+4. Aggiungere fori di ventilazione (pattern a griglia)
+
+### 2. Apertura per la Porta USB-C
+
+```
++---------------------------+
+|                           |
+|                           |
+|                           |
+|                           |
+|                           |
+|                           |
++--------[USB-C]------------+
+```
+
+1. Dimensioni dell'apertura: ~9mm x 3.5mm
+2. Posizionare sul lato inferiore del case
+3. Aggiungere rinforzi interni per supportare il connettore
+4. Prevedere guide di allineamento per facilitare l'inserimento del cavo
+
+### 3. Modifiche Generali al Case
+
+1. Aumentare leggermente le dimensioni complessive per ospitare i componenti aggiuntivi
+2. Aggiungere canali interni per il passaggio dei cavi
+3. Prevedere supporti per il circuito di ricarica
+4. Aggiungere aperture per i LED di stato
+
+## Modifiche al Software
+
+### 1. Monitoraggio della Batteria
+
+```cpp
+// Aggiungi queste definizioni
+#define BATTERY_PIN 34  // Pin ADC per il monitoraggio della batteria
+#define BATTERY_LOW_THRESHOLD 3.3  // Soglia di batteria scarica (Volt)
+#define BATTERY_FULL_THRESHOLD 4.1  // Soglia di batteria carica (Volt)
+
+// Funzione per leggere il livello della batteria
+float readBatteryLevel() {
+  // Leggi il valore analogico
+  int rawValue = analogRead(BATTERY_PIN);
+  
+  // Converti in tensione (dipende dal partitore di tensione utilizzato)
+  // Esempio con partitore 100K/100K e riferimento 3.3V
+  float voltage = rawValue * 2 * 3.3 / 4095.0;
+  
+  return voltage;
+}
+
+// Funzione per ottenere la percentuale della batteria
+int getBatteryPercentage() {
+  float voltage = readBatteryLevel();
+  
+  // Mappa la tensione in percentuale (3.3V-4.2V → 0%-100%)
+  int percentage = map(voltage * 100, 330, 420, 0, 100);
+  
+  // Limita il range
+  percentage = constrain(percentage, 0, 100);
+  
+  return percentage;
+}
+
+// Funzione per visualizzare lo stato della batteria
+void updateBatteryStatus() {
+  int percentage = getBatteryPercentage();
+  
+  // Aggiorna l'icona della batteria nella barra di stato
+  tft.fillRect(tft.width() - 30, 5, 25, 10, TFT_NAVY);
+  
+  // Disegna il contorno della batteria
+  tft.drawRect(tft.width() - 28, 5, 20, 10, TFT_WHITE);
+  tft.drawRect(tft.width() - 8, 7, 2, 6, TFT_WHITE);
+  
+  // Riempi in base alla percentuale
+  int fillWidth = map(percentage, 0, 100, 0, 18);
+  
+  // Colore in base al livello
+  uint16_t color;
+  if (percentage < 20) {
+    color = TFT_RED;
+  } else if (percentage < 50) {
+    color = TFT_YELLOW;
+  } else {
+    color = TFT_GREEN;
+  }
+  
+  tft.fillRect(tft.width() - 27, 6, fillWidth, 8, color);
+}
+```
+
+### 2. Gestione del Risparmio Energetico
+
+```cpp
+// Aggiungi queste definizioni
+#define LOW_BATTERY_CHECK_INTERVAL 60000  // Controlla ogni minuto
+#define CRITICAL_BATTERY_THRESHOLD 5  // Percentuale critica
+
+// Variabili globali
+unsigned long lastBatteryCheck = 0;
+bool lowBatteryWarningShown = false;
+
+// Funzione per controllare lo stato della batteria
+void checkBatteryStatus() {
+  if (millis() - lastBatteryCheck > LOW_BATTERY_CHECK_INTERVAL) {
+    lastBatteryCheck = millis();
+    
+    int percentage = getBatteryPercentage();
+    
+    // Aggiorna l'indicatore nella UI
+    updateBatteryStatus();
+    
+    // Avviso di batteria scarica
+    if (percentage < 15 && !lowBatteryWarningShown) {
+      lowBatteryWarningShown = true;
+      
+      // Mostra avviso
+      tft.fillRect(20, 60, tft.width() - 40, 60, TFT_RED);
+      tft.setTextColor(TFT_WHITE, TFT_RED);
+      tft.setTextSize(1);
+      tft.setCursor(30, 70);
+      tft.print("Batteria scarica!");
+      tft.setCursor(30, 90);
+      tft.print("Collegare il caricabatterie");
+      
+      delay(3000);
+      
+      // Ripristina lo schermo
+      updateScreen();
+    } else if (percentage > 20) {
+      lowBatteryWarningShown = false;
+    }
+    
+    // Spegnimento di emergenza con batteria critica
+    if (percentage < CRITICAL_BATTERY_THRESHOLD) {
+      // Salva lo stato se necessario
+      
+      tft.fillScreen(TFT_BLACK);
+      tft.setTextColor(TFT_RED, TFT_BLACK);
+      tft.setTextSize(2);
+      tft.setCursor(10, 10);
+      tft.println("BATTERIA");
+      tft.setCursor(10, 40);
+      tft.println("CRITICA");
+      tft.setTextSize(1);
+      tft.setCursor(10, 70);
+      tft.println("Spegnimento in corso...");
+      
+      delay(3000);
+      
+      // Spegni il display
+      tft.setBrightness(0);
+      
+      // Entra in deep sleep
+      esp_deep_sleep_start();
+    }
+  }
+}
+```
+
+### 3. Rilevamento della Ricarica
+
+```cpp
+// Aggiungi questa definizione
+#define CHARGING_PIN 35  // Pin per rilevare lo stato di ricarica
+
+// Nel setup
+void setup() {
+  // Configurazione esistente
+  
+  // Configura il pin per rilevare la ricarica
+  pinMode(CHARGING_PIN, INPUT);
+}
+
+// Funzione per controllare lo stato di ricarica
+bool isCharging() {
+  // Il pin è LOW quando la ricarica è in corso (dipende dal circuito TP4056)
+  return !digitalRead(CHARGING_PIN);
+}
+
+// Aggiorna la funzione di visualizzazione della batteria
+void updateBatteryStatus() {
+  int percentage = getBatteryPercentage();
+  bool charging = isCharging();
+  
+  // Aggiorna l'icona della batteria nella barra di stato
+  tft.fillRect(tft.width() - 30, 5, 25, 10, TFT_NAVY);
+  
+  // Disegna il contorno della batteria
+  tft.drawRect(tft.width() - 28, 5, 20, 10, TFT_WHITE);
+  tft.drawRect(tft.width() - 8, 7, 2, 6, TFT_WHITE);
+  
+  // Riempi in base alla percentuale
+  int fillWidth = map(percentage, 0, 100, 0, 18);
+  
+  // Colore in base al livello o stato di ricarica
+  uint16_t color;
+  if (charging) {
+    // Animazione durante la ricarica
+    static int chargeAnimation = 0;
+    chargeAnimation = (chargeAnimation + 1) % 3;
+    
+    switch (chargeAnimation) {
+      case 0: fillWidth = 6; break;
+      case 1: fillWidth = 12; break;
+      case 2: fillWidth = 18; break;
+    }
+    
+    color = TFT_CYAN;
+  } else if (percentage < 20) {
+    color = TFT_RED;
+  } else if (percentage < 50) {
+    color = TFT_YELLOW;
+  } else {
+    color = TFT_GREEN;
+  }
+  
+  tft.fillRect(tft.width() - 27, 6, fillWidth, 8, color);
+  
+  // Mostra simbolo di ricarica se applicabile
+  if (charging) {
+    tft.drawLine(tft.width() - 20, 3, tft.width() - 15, 8, TFT_WHITE);
+    tft.drawLine(tft.width() - 15, 8, tft.width() - 20, 13, TFT_WHITE);
+  }
+}
+```
+
+## Istruzioni di Assemblaggio Aggiornate
+
+### 1. Preparazione dei Componenti
+
+1. Verificare che tutti i componenti siano presenti e funzionanti
+2. Testare la batteria LiPo con un multimetro (dovrebbe misurare ~3.7V)
+3. Testare il circuito di ricarica TP4056 prima dell'installazione
+
+### 2. Assemblaggio del Circuito di Ricarica
+
+1. Saldare i resistori da 5.1kΩ ai pin CC1 e CC2 del connettore USB-C
+2. Collegare VBUS del connettore USB-C all'ingresso del modulo TP4056
+3. Collegare GND del connettore USB-C al GND del modulo TP4056
+4. Collegare le uscite B+ e B- del TP4056 ai connettori della batteria
+5. Collegare l'uscita della batteria all'ingresso del convertitore boost (se utilizzato)
+6. Collegare l'uscita del convertitore boost al pin VIN dell'ESP32-S3
+
+### 3. Collegamento al Monitoraggio della Batteria
+
+1. Creare un partitore di tensione con due resistori da 100kΩ
+2. Collegare il punto centrale del partitore al pin ADC dell'ESP32-S3 (GPIO34)
+3. Collegare il pin CHRG del TP4056 al pin GPIO35 dell'ESP32-S3 per rilevare lo stato di ricarica
+
+### 4. Assemblaggio nel Case
+
+1. Posizionare la batteria LiPo nell'apposito compartimento
+2. Fissare il circuito di ricarica TP4056 nell'alloggiamento previsto
+3. Montare il connettore USB-C nell'apertura del case
+4. Collegare tutti i cavi secondo lo schema
+5. Verificare che non ci siano cortocircuiti prima di chiudere il case
+
+## Considerazioni sulla Sicurezza
+
+### 1. Protezione della Batteria
+
+1. Utilizzare sempre un circuito di protezione per la batteria LiPo
+2. Evitare di esporre il dispositivo a temperature elevate (>45°C)
+3. Non forare, schiacciare o deformare la batteria
+4. Utilizzare solo caricabatterie USB-C standard (5V)
+
+### 2. Gestione Termica
+
+1. Aggiungere fori di ventilazione nel case per dissipare il calore
+2. Posizionare la batteria lontano dai componenti che generano calore
+3. Implementare il monitoraggio della temperatura nel software
+4. Spegnere automaticamente il dispositivo in caso di surriscaldamento
+
+### 3. Protezione da Cortocircuiti
+
+1. Isolare tutti i collegamenti con guaina termorestringente
+2. Utilizzare diodi Schottky per la protezione da inversione di polarità
+3. Aggiungere fusibili resettabili (PTC) per proteggere da sovracorrenti
+4. Verificare l'assenza di cortocircuiti con un multimetro prima dell'accensione
+
+## Specifiche Tecniche Aggiornate
+
+### Batteria e Alimentazione
+
+- **Tipo di Batteria**: LiPo 3.7V, 2000-3000mAh
+- **Autonomia**: 12-18 ore di utilizzo continuo, fino a 45 giorni in standby
+- **Tempo di Ricarica**: ~3-4 ore (con caricabatterie 5V/2A)
+- **Connettore di Ricarica**: USB Type-C
+- **Protezione**: Sovraccarico, sovrascarica, cortocircuito, temperatura
+- **Indicatori**: LED di stato per ricarica e batteria scarica
+
+### Caratteristiche Fisiche
+
+- **Dimensioni**: ~80mm x 50mm x 20mm (con batteria interna)
+- **Peso**: ~150-180g (inclusa batteria)
+- **Materiale del Case**: ABS o PLA (stampato in 3D)
+- **Resistenza**: Protezione da urti leggeri e cadute
+
+## Aggiornamenti al Manuale Utente
+
+### Ricarica del Dispositivo
+
+1. Collegare un cavo USB-C standard alla porta sul fondo del dispositivo
+2. Collegare l'altra estremità a un caricabatterie USB o a una porta USB di un computer
+3. Il LED rosso si accenderà per indicare la ricarica in corso
+4. Il LED verde si accenderà quando la ricarica è completata
+5. Il tempo di ricarica completa è di circa 3-4 ore
+
+### Indicatori di Stato della Batteria
+
+- **Icona verde**: Batteria carica (50-100%)
+- **Icona gialla**: Batteria parzialmente carica (20-50%)
+- **Icona rossa**: Batteria scarica (<20%)
+- **Icona lampeggiante**: Batteria critica, collegare il caricabatterie
+- **Simbolo di fulmine**: Ricarica in corso
+
+### Manutenzione della Batteria
+
+1. Ricaricare il dispositivo quando l'indicatore diventa rosso
+2. Per massimizzare la durata della batteria, evitare di scaricarla completamente
+3. Ricaricare il dispositivo almeno una volta ogni 3 mesi, anche se non utilizzato
+4. Evitare di esporre il dispositivo a temperature estreme
+5. Se la batteria si gonfia o perde liquido, interrompere immediatamente l'uso e sostituirla
+
+## Risoluzione dei Problemi Aggiornata
+
+### Il dispositivo non si ricarica
+
+- Verificare che il cavo USB-C sia collegato correttamente
+- Provare con un altro cavo USB-C
+- Verificare che il caricabatterie fornisca almeno 5V/1A
+- Controllare che la porta USB-C non sia danneggiata o ostruita
+- Se il problema persiste, la batteria potrebbe essere danneggiata e richiedere sostituzione
+
+### La batteria si scarica troppo velocemente
+
+- Ridurre la luminosità del display
+- Aumentare il timeout di spegnimento del display
+- Verificare che non ci siano cortocircuiti nel dispositivo
+- La batteria potrebbe essere deteriorata e richiedere sostituzione
+- Aggiornare il firmware all'ultima versione con ottimizzazioni energetiche
+
+### Il dispositivo si spegne improvvisamente
+
+- La batteria potrebbe essere scarica, ricaricarla
+- Potrebbe esserci un problema con il circuito di protezione
+- Verificare che la batteria non sia danneggiata
+- Controllare che non ci siano surriscaldamenti
+
+## Conclusioni
+
+L'integrazione di una batteria interna e una porta USB-C per la ricarica migliora significativamente l'usabilità e la portabilità del dispositivo ESP32-S3 NFC Reader. Queste aggiunte eliminano la necessità di batterie esterne e semplificano il processo di ricarica, rendendo il dispositivo più pratico per l'uso quotidiano.
+
+Le modifiche al design hardware, al case 3D e al software garantiscono un funzionamento sicuro ed efficiente, con un monitoraggio accurato dello stato della batteria e funzionalità di risparmio energetico avanzate. Il risultato è un dispositivo completamente autonomo, con un'eccellente autonomia e facilità d'uso.
+
+## Appendice: Lista dei Materiali Aggiornata
+
+| Componente | Quantità | Note |
+|------------|----------|------|
+| Batteria LiPo 3.7V 2500mAh | 1 | Con connettore JST-PH |
+| Modulo TP4056 con protezione | 1 | Versione con uscite B+/B- |
+| Connettore USB-C femmina | 1 | Montaggio PCB |
+| Resistori 5.1kΩ | 2 | Per configurazione USB-C |
+| Resistori 100kΩ | 2 | Per partitore di tensione |
+| Diodo Schottky | 1 | Protezione da inversione |
+| Convertitore boost MT3608 | 1 | Opzionale, se necessario |
+| LED di stato | 2 | Rosso e verde |
+| Cavi AWG26 | 1 set | Vari colori |
+| Guaina termorestringente | 1 set | Vari diametri |

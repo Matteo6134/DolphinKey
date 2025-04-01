@@ -1,0 +1,224 @@
+# Progettazione dell'Interfaccia Utente per ESP32-S3
+
+## Analisi delle Funzionalità Richieste
+
+Basandomi sull'analisi del codice sorgente originale, il dispositivo dovrà visualizzare informazioni relative ai tag SRIX4K e permettere la navigazione tra diverse schermate informative tramite tasti direzionali.
+
+## Layout dell'Interfaccia Utente
+
+### Struttura Generale
+L'interfaccia sarà organizzata in una serie di schermate navigabili, con un'area di stato nella parte superiore e un'area principale di contenuto. Considerando le dimensioni limitate del display (1.9" - 2.8"), è importante mantenere l'interfaccia semplice e leggibile.
+
+### Elementi dell'Interfaccia
+
+1. **Barra di Stato** (parte superiore)
+   - Indicatore di connessione NFC (icona)
+   - Stato della batteria (icona)
+   - Titolo della schermata corrente (testo)
+
+2. **Area Principale** (centro)
+   - Visualizzazione delle informazioni del tag
+   - Opzioni selezionabili
+   - Messaggi di stato e feedback
+
+3. **Barra di Navigazione** (parte inferiore)
+   - Indicatori delle azioni disponibili (icone)
+   - Corrispondenza con i tasti direzionali
+
+### Schermate Principali
+
+1. **Schermata Home**
+   - Stato: "In attesa di tag" o "Tag rilevato"
+   - Istruzioni: "Avvicina un tag SRIX4K"
+   - Pulsanti: "Menu", "Impostazioni"
+
+2. **Schermata Informazioni Tag**
+   - UID del tag (esadecimale)
+   - Tipo di tag
+   - Stato (valido/non valido)
+   - Opzioni: "Leggi Blocchi", "Scrivi Blocchi", "Indietro"
+
+3. **Schermata Lettura Blocchi**
+   - Visualizzazione dei blocchi di memoria
+   - Navigazione tra i blocchi (su/giù)
+   - Opzioni: "Dettagli Blocco", "Indietro"
+
+4. **Schermata Dettaglio Blocco**
+   - Numero del blocco
+   - Contenuto in esadecimale
+   - Contenuto in ASCII (se applicabile)
+   - Opzioni: "Modifica", "Indietro"
+
+5. **Schermata Scrittura Blocco**
+   - Numero del blocco
+   - Campo di input per il nuovo valore
+   - Opzioni: "Conferma", "Annulla"
+
+6. **Schermata Impostazioni**
+   - Luminosità display
+   - Timeout di spegnimento
+   - Informazioni di sistema
+   - Opzioni: "Salva", "Indietro"
+
+## Schema di Navigazione
+
+### Utilizzo dei Tasti Direzionali
+
+1. **Su/Giù**
+   - Navigazione tra le opzioni di menu
+   - Scorrimento dei blocchi di memoria
+   - Regolazione dei valori numerici
+
+2. **Sinistra/Destra**
+   - Navigazione tra le schermate principali
+   - Spostamento tra i campi di input
+   - Cambio di pagina nelle visualizzazioni a più pagine
+
+3. **Pulsante Centrale/Conferma**
+   - Selezione dell'opzione evidenziata
+   - Conferma delle azioni
+   - Attivazione delle funzioni
+
+### Flusso di Navigazione
+
+```
+Home
+ ├── Informazioni Tag
+ │    ├── Lettura Blocchi
+ │    │    └── Dettaglio Blocco
+ │    │         └── Modifica Blocco
+ │    └── Scrittura Blocchi
+ │         └── Modifica Blocco
+ └── Impostazioni
+```
+
+## Considerazioni di Design
+
+### Adattamento alle Dimensioni del Display
+
+1. **Display 1.9" (LILYGO T-Display-S3)**
+   - Risoluzione: 170x320 pixel
+   - Font: 12-16px per leggibilità ottimale
+   - Massimo 4-5 opzioni per schermata
+   - Utilizzo di icone semplici per risparmiare spazio
+
+2. **Display 2.8" (Waveshare ESP32-S3)**
+   - Risoluzione: 240x320 pixel
+   - Font: 16-20px per leggibilità ottimale
+   - Massimo 6-7 opzioni per schermata
+   - Possibilità di visualizzare più informazioni contemporaneamente
+
+### Feedback Visivo
+
+1. **Selezione Attiva**
+   - Evidenziazione con colore di contrasto
+   - Inversione di colore (testo chiaro su sfondo scuro)
+   - Bordo attorno all'elemento selezionato
+
+2. **Notifiche**
+   - Popup temporanei per conferme/errori
+   - Barra di progresso per operazioni lunghe
+   - Indicatori di stato lampeggianti per eventi importanti
+
+3. **Modalità di Risparmio Energetico**
+   - Riduzione della luminosità dopo inattività
+   - Spegnimento del display dopo timeout configurabile
+   - Riattivazione con qualsiasi pulsante
+
+## Implementazione Tecnica
+
+### Librerie Grafiche Consigliate
+
+1. **LVGL (Light and Versatile Graphics Library)**
+   - Supporto completo per ESP32-S3
+   - Interfaccia a oggetti
+   - Basso consumo di memoria
+   - Ampia gamma di widget predefiniti
+
+2. **TFT_eSPI**
+   - Ottimizzata per display TFT
+   - Supporto per font personalizzati
+   - Funzioni di disegno di base
+   - Compatibile con molti controller di display
+
+3. **Adafruit GFX**
+   - Semplice da utilizzare
+   - Buona documentazione
+   - Compatibile con molti display
+   - Funzioni di disegno di base
+
+### Gestione degli Input
+
+1. **Debouncing dei Pulsanti**
+   - Implementazione via software per evitare falsi input
+   - Timeout di 50-100ms tra pressioni consecutive
+
+2. **Gestione Eventi**
+   - Sistema basato su eventi per la navigazione
+   - Coda di eventi per gestire input multipli
+
+3. **Modalità di Input**
+   - Navigazione standard (spostamento tra elementi)
+   - Modalità di modifica (per l'inserimento di valori)
+   - Modalità di scorrimento (per liste lunghe)
+
+## Mockup delle Schermate Principali
+
+### Schermata Home
+```
+┌────────────────────┐
+│ NFC [•] Batt [███] │
+│ Home               │
+├────────────────────┤
+│                    │
+│  Avvicina un tag   │
+│     SRIX4K         │
+│                    │
+│                    │
+│                    │
+├────────────────────┤
+│ [Menu] [Impostaz.] │
+└────────────────────┘
+```
+
+### Schermata Informazioni Tag
+```
+┌────────────────────┐
+│ NFC [•] Batt [███] │
+│ Info Tag           │
+├────────────────────┤
+│ UID: 0xA1B2C3D4    │
+│ Tipo: SRIX4K       │
+│ Stato: Valido      │
+│                    │
+│ > Leggi Blocchi    │
+│   Scrivi Blocchi   │
+│   Indietro         │
+├────────────────────┤
+│ [Sel] [Su/Giù]     │
+└────────────────────┘
+```
+
+### Schermata Lettura Blocchi
+```
+┌────────────────────┐
+│ NFC [•] Batt [███] │
+│ Blocchi            │
+├────────────────────┤
+│ Blocco: 07         │
+│ 0xA1B2C3D4         │
+│                    │
+│ Blocco: 08         │
+│ 0x12345678         │
+│                    │
+│ Blocco: 09         │
+├────────────────────┤
+│ [Det] [Su/Giù]     │
+└────────────────────┘
+```
+
+## Conclusioni
+
+Questa progettazione dell'interfaccia utente è ottimizzata per un dispositivo tascabile con display ESP32-S3 e controlli tramite tasti direzionali. L'interfaccia è stata pensata per essere intuitiva, leggibile e funzionale, permettendo all'utente di accedere facilmente a tutte le funzionalità del progetto originale in un formato più compatto e portatile.
+
+La struttura modulare dell'interfaccia permetterà future espansioni e personalizzazioni, mantenendo la coerenza visiva e l'usabilità del dispositivo.
